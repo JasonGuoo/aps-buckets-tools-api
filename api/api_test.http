@@ -1,0 +1,22 @@
+### 1. Create Job & Upload DWG
+POST http://localhost:3000/api/job
+Content-Type: multipart/form-data; boundary=BOUNDARY
+
+--BOUNDARY
+Content-Disposition: form-data; name="file"; filename="test.dwg"
+Content-Type: application/octet-stream
+
+< ./test.dwg
+--BOUNDARY--
+
+### 2. Query Job Status (replace :id with actual job_id)
+GET http://localhost:3000/api/job/:id
+
+### 3. Download Result ZIP (replace :id with actual job_id)
+GET http://localhost:3000/api/job/:id/download
+
+### 4. Error: Query non-existent job
+GET http://localhost:3000/api/job/999999
+
+### 5. Error: Download non-existent result
+GET http://localhost:3000/api/job/999999/download 

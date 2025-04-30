@@ -1,5 +1,11 @@
 # Buckets Tools
 
+> **New! Unified DWG Processing API**
+>
+> This project extends the original OSS/APS tools with a new integrated workflow API. Now, external systems can upload a DWG file in one step and automatically receive all extracted and converted results (properties, images, text, etc.) in a downloadable ZIP package. See the [API Documentation](./api_doc.md) for details and usage examples.
+>
+> 中文文档请见 [API 文档（中文版）](./api_doc_zh.md)
+
 [![Node.js](https://img.shields.io/badge/Node.js-10.16.2-blue.svg)](https://nodejs.org/)
 [![npm](https://img.shields.io/badge/npm-6.9.0-blue.svg)](https://www.npmjs.com/)
 ![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20osx%20%7C%20linux-lightgray.svg)
@@ -121,3 +127,29 @@ Please see the [LICENSE](LICENSE) file for full details.
 
 Adam Nagy (Autodesk Partner Development)<br />
 http://aps.autodesk.com<br />
+
+## Installation
+
+1. **Clone the repository:**
+   ```sh
+   git clone https://github.com/autodesk-platform-services/aps-buckets-tools
+   cd aps-buckets-tools-api
+   ```
+2. **Install dependencies:**
+   ```sh
+   npm install
+   ```
+3. **Configure environment variables:**
+   - Copy `env.example` to `.env` and fill in your APS credentials and session secret:
+     ```sh
+     cp env.example .env
+     # Edit .env with your values
+     ```
+4. **Start the server:**
+   ```sh
+   npm start
+   ```
+5. **Open your browser:**
+   - Visit [http://localhost:3000](http://localhost:3000)
+
+---

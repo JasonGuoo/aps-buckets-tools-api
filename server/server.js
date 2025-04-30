@@ -43,9 +43,10 @@ app.set('port', process.env.PORT || 3000); // main port
 var oauth = require('./oauth');
 var dm = require('./data.management');
 var md = require('./model.derivative');
+var jobApi = require('../api/job.api');
 app.use('/', oauth); // redirect oauth API calls
 app.use('/dm', dm); // redirect our Data Management API calls
 app.use('/md', md); // redirect our Data Management API calls
-
+app.use('/api', jobApi); // 集成 Job API 路由
 
 module.exports = app;
