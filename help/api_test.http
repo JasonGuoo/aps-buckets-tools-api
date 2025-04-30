@@ -1,0 +1,27 @@
+### 环境变量
+@baseUrl = http://localhost:3000
+@jobId = 123
+
+### 1. 创建任务并上传 DWG 文件
+# @name createJob
+POST {{baseUrl}}/api/job
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="example.dwg"
+Content-Type: application/octet-stream
+
+< ./example.dwg
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### 保存 jobId 变量
+@jobId = {{createJob.response.body.job_id}}
+
+### 2. 查询任务状态
+GET {{baseUrl}}/api/job/{{jobId}}
+
+### 3. 下载结果 ZIP
+GET {{baseUrl}}/api/job/{{jobId}}/download
+
+### 4. 检查 APS 认证状态
+GET {{baseUrl}}/api/auth/status 

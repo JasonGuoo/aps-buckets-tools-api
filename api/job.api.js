@@ -230,4 +230,18 @@ router.get('/job/:id/download', (req, res) => {
     }
 });
 
+// 检查 APS client_id/secret 是否已配置
+router.get('/auth/status', (req, res) => {
+    const config = require('../server/config');
+    const hasCred = !!(config.credentials.client_id && config.credentials.client_secret &&
+        !config.credentials.client_id.startsWith('<replace') &&
+        !config.credentials.client_secret.startsWith('<replace'));
+    if (hasCred) {
+        logger.info('检测到 APS_CLIENT_ID 和 APS_CLIENT_SECRET，已配置。');
+    } else {
+        logger.warn('未检测到 APS_CLIENT_ID 或 APS_CLIENT_SECRET，未配置。');
+    }
+    res.json({ success: true, configured: hasCred });
+});
+
 module.exports = router; 

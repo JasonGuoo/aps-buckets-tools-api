@@ -3,7 +3,7 @@ var MyVars = {
   ajaxCalls: []
 };
 
-$(document).ready(function() {
+$(document).ready(function () {
   //debugger;
   // check URL params
   var url = new URL(window.location.href);
@@ -19,14 +19,42 @@ $(document).ready(function() {
   MyVars.noHierarchy = (url.searchParams.get("nohierarchy") != null);
   MyVars.advanced = {};
   if (url.searchParams.get("advanced.conversionMethod"))
-  	MyVars.advanced.conversionMethod = url.searchParams.get("advanced.conversionMethod");
+    MyVars.advanced.conversionMethod = url.searchParams.get("advanced.conversionMethod");
   if (url.searchParams.get("advanced.exportSettingName"))
-  	MyVars.advanced.exportSettingName = url.searchParams.get("advanced.exportSettingName");
+    MyVars.advanced.exportSettingName = url.searchParams.get("advanced.exportSettingName");
 
   MyVars.useSvf2 = (url.searchParams.get("usesvf2") != null);
   MyVars.uploadInParallel = (url.searchParams.get("uploadinparallel") != null);
 
-  $("#createBucket").click(function(evt) {
+  // 检查 APS 凭证配置状态
+  $.get('/api/auth/status', function (resp) {
+    if (resp && resp.configured) {
+      // APS 凭证已从环境变量加载，将输入框设置为掩码值
+      $('#client_id').attr('type', 'password').val('********').prop('disabled', true);
+      $('#client_secret').attr('type', 'password').val('********').prop('disabled', true);
+
+      // 先将按钮显示为"登录中..."并禁用，防止用户点击
+      $('#authenticate').text('登录中...').addClass('btn-info').removeClass('btn-warning btn-success').prop('disabled', true);
+
+      // 同时禁用其他可能的操作按钮
+      $('#createBucket, #uploadFile, #deleteManifest').prop('disabled', true);
+
+      // 显示登录进度
+      showProgress("自动登录中...", "inprogress");
+
+      // 自动触发登录按钮点击事件，完成登录
+      setTimeout(function () {
+        $('#authenticate').trigger('click');
+      }, 1000); // 给予足够延迟，确保DOM和事件已完全加载
+    } else {
+      // APS 凭证未配置，启用输入框和按钮
+      $('#client_id').attr('type', 'text').val('').prop('disabled', false);
+      $('#client_secret').attr('type', 'password').val('').prop('disabled', false);
+      $('#authenticate').text('Log In').addClass('btn-warning').removeClass('btn-success btn-info').prop('disabled', false);
+    }
+  });
+
+  $("#createBucket").click(function (evt) {
     // adamnagy_2017_06_14
     var bucketName = $("#bucketName").val();
     var bucketType = $("#bucketType").val();
@@ -42,14 +70,14 @@ $(document).ready(function() {
           region: getOssRegion(MyVars.selectedNode)
         })
       })
-        .done(function(data) {
+        .done(function (data) {
           console.log("Response" + data);
           showProgress("Bucket created", "success");
           $("#apsFiles")
             .jstree(true)
             .refresh();
         })
-        .fail(function(xhr, ajaxOptions, thrownError) {
+        .fail(function (xhr, ajaxOptions, thrownError) {
           console.log("Bucket creation failed!");
           showProgress("Could not create bucket", "failed");
         })
@@ -65,7 +93,7 @@ $(document).ready(function() {
     const stepsMax = Math.floor(file.size / CHUNK_SIZE) + 1;
     const finishedChunks = new Set();
 
-    let getUrlsAsync = function(index, count, uploadKey) {
+    let getUrlsAsync = function (index, count, uploadKey) {
       console.log(`getUrlsAsync: index = ${index}, count = ${count}`);
 
       return new Promise(async (resolve, reject) => {
@@ -81,7 +109,7 @@ $(document).ready(function() {
           let res = await fetch(url, {
             method: 'GET'
           })
-          
+
           let data = await res.json();
 
           resolve(data);
@@ -90,27 +118,27 @@ $(document).ready(function() {
         }
       });
     }
-        
-    let readChunkAsync = function(file, start, end, total) {
+
+    let readChunkAsync = function (file, start, end, total) {
       return new Promise((resolve, reject) => {
         console.log(`readChunkAsync: ${start} - ${end}`);
 
         var reader = new FileReader();
         var blob = file.slice(start, end);
-  
-        reader.onload = function(e) {
+
+        reader.onload = function (e) {
           var currentStart = start;
           var currentEnd = start + e.loaded - 1;
           var range = "bytes " + currentStart + "-" + currentEnd + "/" + total;
-  
+
           resolve({ readerResult: reader.result, range: range });
         };
-  
+
         reader.readAsArrayBuffer(blob);
       });
     }
 
-    let uploadChunkAsync = function(start, end, url) {
+    let uploadChunkAsync = function (start, end, url) {
       console.log(`uploadChunkAsync: ${start} - ${end}`);
       return new Promise(async (resolve, reject) => {
         if (finishedChunks.has(start)) {
@@ -141,12 +169,12 @@ $(document).ready(function() {
       });
     };
 
-    let uploadBatchAsync = function(step, count, uploadKey) {
+    let uploadBatchAsync = function (step, count, uploadKey) {
       console.log(`uploadBatchAsync: index=${step}, uploadKey=${uploadKey}`);
       return new Promise(async (resolve, reject) => {
         try {
           let promises = [];
-          
+
           let resUrls = await getUrlsAsync(step, count, uploadKey);
           uploadKey = resUrls.uploadKey
 
@@ -177,7 +205,7 @@ $(document).ready(function() {
       let retryCount = 0;
       while (true) {
         try {
-          const count = Math.min(stepsMax - step, BATCH_SIZE); 
+          const count = Math.min(stepsMax - step, BATCH_SIZE);
           uploadKey = await uploadBatchAsync(step, count, uploadKey);
 
           break;
@@ -210,13 +238,13 @@ $(document).ready(function() {
       callback("success");
     }
   }
-  
-  $("#apsUploadHidden").change(function(evt) {
+
+  $("#apsUploadHidden").change(function (evt) {
     showProgress("Uploading file... ", "inprogress");
 
     let start = new Date().getTime();
 
-    uploadChunksAsync(this.files[0], {uploadInParallel: MyVars.uploadInParallel}, (state, message) => {
+    uploadChunksAsync(this.files[0], { uploadInParallel: MyVars.uploadInParallel }, (state, message) => {
       switch (state) {
         case "inprogress":
           showProgress(
@@ -239,8 +267,8 @@ $(document).ready(function() {
 
         case "success":
           let end = new Date().getTime();
-          let diff = end - start; 
-          console.log(`${this.files[0].size} byte uploaded in ${diff} ms (parallel: ${MyVars.uploadInParallel})`)  
+          let diff = end - start;
+          console.log(`${this.files[0].size} byte uploaded in ${diff} ms (parallel: ${MyVars.uploadInParallel})`)
 
           showProgress("File uploaded", "success");
           $("#apsFiles")
@@ -251,26 +279,26 @@ $(document).ready(function() {
           MyVars.keepTrying = true;
           break;
       }
-      
+
     });
   });
 
-  $("#uploadFile").click(function(evt) {
+  $("#uploadFile").click(function (evt) {
     evt.preventDefault();
     $("#apsUploadHidden").trigger("click");
   });
 
   var auth = $("#authenticate");
-  auth.click(function() {
+  auth.click(function () {
     // Get the tokens
     get2LegToken(
-      function(token) {
+      function (token) {
         var auth = $("#authenticate");
 
         MyVars.token2Leg = token;
         console.log(
           "Returning new 3 legged token (User Authorization): " +
-            MyVars.token2Leg
+          MyVars.token2Leg
         );
         showProgress();
 
@@ -282,13 +310,13 @@ $(document).ready(function() {
         // Download list of available file formats
         fillFormats();
       },
-      function(err) {
+      function (err) {
         showProgress(err.responseText, "failed");
       }
     );
   });
 
-  $("#progressInfo").click(function() {
+  $("#progressInfo").click(function () {
     MyVars.keepTrying = false;
 
     // In case there are parallel downloads or any calls, just cancel them
@@ -328,7 +356,7 @@ function logoff() {
   MyVars.ajaxCalls.push(
     $.ajax({
       url: "/user/logoff",
-      success: function(oauthUrl) {
+      success: function (oauthUrl) {
         location.href = oauthUrl;
       }
     })
@@ -340,27 +368,67 @@ function get2LegToken(onSuccess, onError) {
     var client_id = $("#client_id").val();
     var client_secret = $("#client_secret").val();
     var scopes = $("#scopes").val();
-    MyVars.ajaxCalls.push(
-      $.ajax({
-        url: "/user/token",
-        type: "POST",
-        contentType: "application/json",
-        dataType: "json",
-        data: JSON.stringify({
-          client_id: client_id,
-          client_secret: client_secret,
-          scopes: scopes
-        }),
-        success: function(data) {
-          onSuccess(data.token, data.expires_in);
-        },
-        error: function(err, text) {
-          if (onError) {
-            onError(err);
+
+    // 检查是否使用了掩码值
+    if (client_id === '********' && client_secret === '********') {
+      console.log("使用环境变量中的 APS 凭证");
+
+      // 直接从后端获取已配置凭证的令牌，传递掩码值让后端使用环境变量
+      MyVars.ajaxCalls.push(
+        $.ajax({
+          url: "/user/token",
+          type: "POST",
+          contentType: "application/json",
+          dataType: "json",
+          data: JSON.stringify({
+            client_id: '********',
+            client_secret: '********',
+            scopes: scopes
+          }),
+          success: function (data) {
+            // 登录成功，重新启用相关按钮
+            $('#createBucket, #uploadFile, #deleteManifest').prop('disabled', false);
+            showProgress("自动登录成功", "success");
+            onSuccess(data.token, data.expires_in);
+          },
+          error: function (err) {
+            // 登录失败，重新启用按钮并显示错误
+            $('#authenticate').prop('disabled', false).text('重试登录').addClass('btn-warning').removeClass('btn-info');
+            $('#createBucket, #uploadFile, #deleteManifest').prop('disabled', false);
+
+            if (onError) {
+              onError(err);
+              showProgress("自动登录失败: " + (err.responseText || "未知错误"), "failed");
+            }
           }
-        }
-      })
-    );
+        })
+      );
+    } else {
+      // 使用用户输入的值
+      console.log("使用用户输入的 APS 凭证");
+      MyVars.ajaxCalls.push(
+        $.ajax({
+          url: "/user/token",
+          type: "POST",
+          contentType: "application/json",
+          dataType: "json",
+          data: JSON.stringify({
+            client_id: client_id,
+            client_secret: client_secret,
+            scopes: scopes
+          }),
+          success: function (data) {
+            onSuccess(data.token, data.expires_in);
+          },
+          error: function (err) {
+            if (onError) {
+              onError(err);
+              showProgress("获取令牌失败: " + (err.responseText || "未知错误"), "failed");
+            }
+          }
+        })
+      );
+    }
   } else {
     console.log(
       "Returning saved 3 legged token (User Authorization): " + MyVars.token2Leg
@@ -381,13 +449,13 @@ function PopupCenter(url, title, w, h) {
   var width = window.innerWidth
     ? window.innerWidth
     : document.documentElement.clientWidth
-    ? document.documentElement.clientWidth
-    : screen.width;
+      ? document.documentElement.clientWidth
+      : screen.width;
   var height = window.innerHeight
     ? window.innerHeight
     : document.documentElement.clientHeight
-    ? document.documentElement.clientHeight
-    : screen.height;
+      ? document.documentElement.clientHeight
+      : screen.height;
 
   var left = width / 2 - w / 2 + dualScreenLeft;
   var top = height / 2 - h / 2 + dualScreenTop;
@@ -395,13 +463,13 @@ function PopupCenter(url, title, w, h) {
     url,
     title,
     "scrollbars=yes, width=" +
-      w +
-      ", height=" +
-      h +
-      ", top=" +
-      top +
-      ", left=" +
-      left
+    w +
+    ", height=" +
+    h +
+    ", top=" +
+    top +
+    ", left=" +
+    left
   );
 
   // Puts focus on the newWindow
@@ -453,9 +521,9 @@ function isArraySame(arr1, arr2) {
 function getDerivativeUrns(derivative, format, getThumbnail, objectIds) {
   console.log(
     "getDerivativeUrns for derivative=" +
-      derivative.outputType +
-      " and objectIds=" +
-      (objectIds ? objectIds.toString() : "none")
+    derivative.outputType +
+    " and objectIds=" +
+    (objectIds ? objectIds.toString() : "none")
   );
   var res = [];
   for (var childId in derivative.children) {
@@ -530,7 +598,7 @@ function askForFileType(
         region: getDerivativesRegion()
       })
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
 
         if (
@@ -538,12 +606,12 @@ function askForFileType(
           data.result === "created"
         ) {
           // already submitted data
-          getManifest(urn, function(res) {
+          getManifest(urn, function (res) {
             onsuccess(res);
           });
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         showProgress("Translation failed", "failed");
         console.log("/md/export call failed\n" + err.statusText);
       })
@@ -558,7 +626,7 @@ function getMetadata(urn, onsuccess, onerror) {
       url: "/md/metadatas/" + urn,
       type: "GET"
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
 
         // Get first model guid
@@ -568,7 +636,7 @@ function getMetadata(urn, onsuccess, onerror) {
         // delete the manifest
         var md0 = data.data.metadata[0];
         if (!md0) {
-          getManifest(urn, function() {});
+          getManifest(urn, function () { });
         } else {
           var guid = md0.guid;
           if (onsuccess !== undefined) {
@@ -576,7 +644,7 @@ function getMetadata(urn, onsuccess, onerror) {
           }
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("GET /md/metadata call failed\n" + err.statusText);
         onerror();
       })
@@ -591,14 +659,14 @@ function getHierarchy(urn, guid, onsuccess) {
       type: "GET",
       data: { urn: urn, guid: guid }
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
 
         // If it's 'accepted' then it's not ready yet
         if (data.result === "accepted") {
           // Let's try again
           if (MyVars.keepTrying) {
-            window.setTimeout(function() {
+            window.setTimeout(function () {
               getHierarchy(urn, guid, onsuccess);
             }, 500);
           } else {
@@ -613,7 +681,7 @@ function getHierarchy(urn, guid, onsuccess) {
           onsuccess(data);
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("GET /md/hierarchy call failed\n" + err.statusText);
       })
   );
@@ -627,14 +695,14 @@ function getProperties(urn, guid, onsuccess) {
       type: "GET",
       data: { urn: urn, guid: guid }
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
 
         if (onsuccess !== undefined) {
           onsuccess(data);
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("GET /api/properties call failed\n" + err.statusText);
       })
   );
@@ -650,7 +718,7 @@ function getManifest(urn, onsuccess) {
       url: "/md/manifests/" + urn + "?region=" + getDerivativesRegion(),
       type: "GET"
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
 
         if (data.status !== "failed") {
@@ -659,7 +727,7 @@ function getManifest(urn, onsuccess) {
 
             if (MyVars.keepTrying) {
               // Keep calling until it's done
-              window.setTimeout(function() {
+              window.setTimeout(function () {
                 getManifest(urn, onsuccess);
               }, 500);
             } else {
@@ -676,7 +744,7 @@ function getManifest(urn, onsuccess) {
           //delManifest(urn, function () {});
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         showProgress("Translation failed", "failed");
         console.log("GET /api/manifest call failed\n" + err.statusText);
       })
@@ -690,7 +758,7 @@ function delManifest(urn, onsuccess) {
       url: "/md/manifests/" + urn,
       type: "DELETE"
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
         if (data.result === "success") {
           if (onsuccess !== undefined) {
@@ -699,7 +767,7 @@ function delManifest(urn, onsuccess) {
           }
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("DELETE /api/manifest call failed\n" + err.statusText);
       })
   );
@@ -717,26 +785,26 @@ function getFormats(onsuccess) {
       url: "/md/formats",
       type: "GET"
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
 
         if (onsuccess !== undefined) {
           onsuccess(data);
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("GET /md/formats call failed\n" + err.statusText);
       })
   );
 }
 
 function fillFormats() {
-  getFormats(function(data) {
+  getFormats(function (data) {
     var apsFormats = $("#apsFormats");
     apsFormats.data("apsFormats", data);
 
     var download = $("#downloadExport");
-    download.click(function() {
+    download.click(function () {
       MyVars.keepTrying = true;
 
       var elem = $("#apsHierarchy");
@@ -759,7 +827,7 @@ function fillFormats() {
         if (nodeIds.length) {
           objectIds = [];
 
-          $.each(nodeIds, function(index, value) {
+          $.each(nodeIds, function (index, value) {
             objectIds.push(parseInt(value, 10));
           });
         }
@@ -773,7 +841,7 @@ function fillFormats() {
         objectIds,
         rootFileName,
         MyVars.fileExtType,
-        function(res) {
+        function (res) {
           if (format === "thumbnail") {
             getThumbnail(urn);
 
@@ -822,12 +890,12 @@ function fillFormats() {
     });
 
     var deleteManifest = $("#deleteManifest");
-    deleteManifest.click(function() {
+    deleteManifest.click(function () {
       var urn = MyVars.selectedUrn;
 
       cleanupViewer();
 
-      delManifest(urn, function() {});
+      delManifest(urn, function () { });
     });
   });
 }
@@ -841,7 +909,7 @@ function updateFormats(format) {
   // using this workaround for the time being
   //apsFormats.append($("<option />").val('obj').text('obj'));
 
-  $.each(formats.formats, function(key, value) {
+  $.each(formats.formats, function (key, value) {
     if (key === "obj" || value.indexOf(format) > -1) {
       apsFormats.append(
         $("<option />")
@@ -884,7 +952,7 @@ function prepareFilesTree() {
     tree.refresh();
     return;
   }
-            
+
   $("#apsFiles")
     .jstree({
       core: {
@@ -893,7 +961,7 @@ function prepareFilesTree() {
         data: {
           url: "/dm/treeNode",
           dataType: "json",
-          data: function(node) {
+          data: function (node) {
             return {
               id: node.id,
               region: getOssRegion(node)
@@ -924,7 +992,7 @@ function prepareFilesTree() {
         items: filesTreeContextMenu
       }
     })
-    .bind("select_node.jstree", function(evt, data) {
+    .bind("select_node.jstree", function (evt, data) {
       // Clean up previous instance
       cleanupViewer();
 
@@ -1021,8 +1089,8 @@ function getBucketKeyObjectName(objectId) {
   var bucketKeyValue = bucketKeyParams[bucketKeyParams.length - 1];
 
   var ret = {
-      bucketKey: decodeURIComponent(bucketKeyValue),
-      objectName: decodeURIComponent(objectNameValue)
+    bucketKey: decodeURIComponent(bucketKeyValue),
+    objectName: decodeURIComponent(objectNameValue)
   };
 
   return ret;
@@ -1036,13 +1104,13 @@ function downloadFileNew(id) {
     url: `/dm/downloadurl?bucketName=${bo.bucketKey}&objectName=${bo.objectName}`,
     type: "GET"
   })
-    .done(function(data) {
+    .done(function (data) {
       console.log(data);
       if (data.status === "complete") {
         window.open(data.url, "_blank");
       }
     })
-    .fail(function(err) {
+    .fail(function (err) {
       console.log("GET /dm/downloadurl call failed\n" + err.statusText);
     })
 }
@@ -1059,7 +1127,7 @@ function deleteFile(id) {
       url: "/dm/files/" + encodeURIComponent(id),
       type: "DELETE"
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
         if (data.status === "success") {
           $("#apsFiles")
@@ -1068,7 +1136,7 @@ function deleteFile(id) {
           showProgress("File deleted", "success");
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("DELETE /dm/files/ call failed\n" + err.statusText);
       })
   );
@@ -1085,7 +1153,7 @@ function deleteBucket(id) {
       url: "/dm/buckets/" + encodeURIComponent(id),
       type: "DELETE"
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
         if (data.status === "success") {
           $("#apsFiles")
@@ -1094,7 +1162,7 @@ function deleteBucket(id) {
           showProgress("Bucket deleted", "success");
         }
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("DELETE /dm/buckets/ call failed\n" + err.statusText);
       })
   );
@@ -1106,11 +1174,11 @@ function getPublicUrl(id) {
       url: "/dm/files/" + encodeURIComponent(id) + "/publicurl",
       type: "GET"
     })
-      .done(function(data) {
+      .done(function (data) {
         console.log(data);
         alert(data.signedUrl);
       })
-      .fail(function(err) {
+      .fail(function (err) {
         console.log("DELETE /dm/buckets/ call failed\n" + err.statusText);
       })
   );
@@ -1122,7 +1190,7 @@ function filesTreeContextMenu(node, callback) {
     callback({
       refreshTree: {
         label: "Refresh",
-        action: function() {
+        action: function () {
           $("#apsFiles")
             .jstree(true)
             .refresh();
@@ -1130,13 +1198,13 @@ function filesTreeContextMenu(node, callback) {
       },
       bucketDelete: {
         label: "Delete bucket",
-        action: function(obj) {
+        action: function (obj) {
           deleteBucket(MyVars.selectedNode.id);
         }
       },
       fileUpload: {
         label: "Upload file",
-        action: function(obj) {
+        action: function (obj) {
           $("#apsUploadHidden").trigger("click");
         }
       }
@@ -1145,19 +1213,19 @@ function filesTreeContextMenu(node, callback) {
     callback({
       fileDelete: {
         label: "Delete file",
-        action: function(obj) {
+        action: function (obj) {
           deleteFile(MyVars.selectedNode.id);
         }
       },
       fileDownload: {
         label: "Download file",
-        action: function(obj) {
+        action: function (obj) {
           downloadFileNew(MyVars.selectedNode.id);
         }
       },
       publicUrl: {
         label: "Public URL",
-        action: function(obj) {
+        action: function (obj) {
           getPublicUrl(MyVars.selectedNode.id);
         }
       }
@@ -1188,18 +1256,18 @@ function showHierarchy(urn, guid, objectIds, rootFileName, fileExtType) {
     objectIds,
     rootFileName,
     fileExtType,
-    function(manifest) {
+    function (manifest) {
       initializeViewer(urn);
-      
+
       if (MyVars.noHierarchy)
         return;
 
       getMetadata(
         urn,
-        function(guid) {
+        function (guid) {
           showProgress("Retrieving hierarchy...", "inprogress");
 
-          getHierarchy(urn, guid, function(data) {
+          getHierarchy(urn, guid, function (data) {
             showProgress("Retrieved hierarchy", "success");
 
             for (var derId in manifest.derivatives) {
@@ -1215,7 +1283,7 @@ function showHierarchy(urn, guid, objectIds, rootFileName, fileExtType) {
             prepareHierarchyTree(urn, guid, data.data);
           });
         },
-        function() {}
+        function () { }
       );
     }
   );
@@ -1284,7 +1352,7 @@ function prepareHierarchyTree(urn, guid, json) {
         items: hierarchyTreeContextMenu
       }
     })
-    .bind("select_node.jstree", function(evt, data) {
+    .bind("select_node.jstree", function (evt, data) {
       if (data.node.type === "object") {
         var urn = MyVars.selectedUrn;
         var guid = MyVars.selectedGuid;
@@ -1295,13 +1363,13 @@ function prepareHierarchyTree(urn, guid, json) {
           .empty()
           .jstree("destroy");
 
-        fetchProperties(urn, guid, function(props) {
+        fetchProperties(urn, guid, function (props) {
           preparePropertyTree(urn, guid, objectId, props);
           selectInViewer([objectId]);
         });
       }
     })
-    .bind("check_node.jstree uncheck_node.jstree", function(evt, data) {
+    .bind("check_node.jstree uncheck_node.jstree", function (evt, data) {
       // To avoid recursion we are checking if the changes are
       // caused by a viewer selection which is calling
       // selectInHierarchyTree()
@@ -1311,7 +1379,7 @@ function prepareHierarchyTree(urn, guid, json) {
 
         // Convert from strings to numbers
         var objectIds = [];
-        $.each(nodeIds, function(index, value) {
+        $.each(nodeIds, function (index, value) {
           objectIds.push(parseInt(value, 10));
         });
 
@@ -1339,7 +1407,7 @@ function selectInHierarchyTree(objectIds) {
       // Make sure that it is visible for the user
       tree._open_to(id);
     }
-  } catch (ex) {}
+  } catch (ex) { }
 
   MyVars.selectingInHierarchyTree = false;
 }
@@ -1349,7 +1417,7 @@ function hierarchyTreeContextMenu(node, callback) {
 
   var menuItem = {
     label: "Select in Fusion",
-    action: function(obj) {
+    action: function (obj) {
       var path = $("#apsHierarchy")
         .jstree()
         .get_path(node, "/");
@@ -1383,7 +1451,7 @@ function hierarchyTreeContextMenu(node, callback) {
 function fetchProperties(urn, guid, onsuccess) {
   var props = $("#apsProperties").data("apsProperties");
   if (!props) {
-    getProperties(urn, guid, function(data) {
+    getProperties(urn, guid, function (data) {
       $("#apsProperties").data("apsProperties", data.data);
       onsuccess(data.data);
     });
@@ -1451,7 +1519,7 @@ function preparePropertyTree(urn, guid, objectId, props) {
       },
       plugins: ["types", "sort"]
     })
-    .bind("activate_node.jstree", function(evt, data) {
+    .bind("activate_node.jstree", function (evt, data) {
       //
     });
 }
@@ -1513,7 +1581,7 @@ function initializeViewer(urn) {
       //api: 'fluent',
       // env: 'FluentProduction'
     };
-  
+
     if (MyVars.viewer) {
       loadDocument(MyVars.viewer, options.document);
     } else {
@@ -1524,7 +1592,7 @@ function initializeViewer(urn) {
         //environment: "AutodeskStaging"
       };
       MyVars.viewer = new Autodesk.Viewing.GuiViewer3D(viewerElement, config);
-      Autodesk.Viewing.Initializer(options, function() {
+      Autodesk.Viewing.Initializer(options, function () {
         MyVars.viewer.start(); // this would be needed if we also want to load extensions
         //setAecProfile(MyVars.viewer);  
         loadDocument(MyVars.viewer, options.document);
@@ -1535,14 +1603,14 @@ function initializeViewer(urn) {
 }
 
 function addSelectionListener(viewer) {
-  viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, function(
+  viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, function (
     event
   ) {
     selectInHierarchyTree(event.dbIdArray);
 
     var dbId = event.dbIdArray[0];
     if (dbId) {
-      viewer.getProperties(dbId, function(props) {
+      viewer.getProperties(dbId, function (props) {
         console.log(props.externalId);
       });
     }
@@ -1560,7 +1628,7 @@ function loadDocument(viewer, documentId) {
   Autodesk.Viewing.Document.load(
     documentId,
     // onLoad
-    function(doc) {
+    function (doc) {
       const defGeometry = doc.getRoot().getDefaultGeometry();
 
       viewer.loadDocumentNode(doc, defGeometry).then(i => {
@@ -1568,7 +1636,7 @@ function loadDocument(viewer, documentId) {
       });
     },
     // onError
-    function(errorMsg) {
+    function (errorMsg) {
       //showThumbnail(documentId.substr(4, documentId.length - 1));
     }
   );
@@ -1624,10 +1692,10 @@ function showProgress(text, status) {
   }
 }
 
-MyVars.getAllProps = async function() {
+MyVars.getAllProps = async function () {
   var propTree = {};
   var handled = [];
-  var getProps = async function(id, propNode) {
+  var getProps = async function (id, propNode) {
     return new Promise(resolve => {
       NOP_VIEWER.getProperties(id, props => {
         resolve(props);
@@ -1635,7 +1703,7 @@ MyVars.getAllProps = async function() {
     });
   };
 
-  var getPropsRec = async function(id, propNode) {
+  var getPropsRec = async function (id, propNode) {
     var props = await getProps(id, propNode);
     handled.push(props.dbId);
     propNode["child_" + props.dbId] = props.properties;
@@ -1688,7 +1756,7 @@ PropertyInspectorExtension.prototype = Object.create(
 );
 PropertyInspectorExtension.prototype.constructor = PropertyInspectorExtension;
 
-PropertyInspectorExtension.prototype.load = function() {
+PropertyInspectorExtension.prototype.load = function () {
   if (this.viewer.toolbar) {
     // Toolbar is already available, create the UI
     this.createUI();
@@ -1703,7 +1771,7 @@ PropertyInspectorExtension.prototype.load = function() {
   return true;
 };
 
-PropertyInspectorExtension.prototype.onToolbarCreated = function() {
+PropertyInspectorExtension.prototype.onToolbarCreated = function () {
   this.viewer.removeEventListener(
     av.TOOLBAR_CREATED_EVENT,
     this.onToolbarCreatedBinded
@@ -1712,7 +1780,7 @@ PropertyInspectorExtension.prototype.onToolbarCreated = function() {
   this.createUI();
 };
 
-PropertyInspectorExtension.prototype.createUI = function() {
+PropertyInspectorExtension.prototype.createUI = function () {
   var viewer = this.viewer;
   var panel = this.panel;
 
@@ -1722,7 +1790,7 @@ PropertyInspectorExtension.prototype.createUI = function() {
   );
   toolbarButtonShowDockingPanel.icon.classList.add("adsk-icon-properties");
   toolbarButtonShowDockingPanel.container.style.color = "orange";
-  toolbarButtonShowDockingPanel.onClick = function(e) {
+  toolbarButtonShowDockingPanel.onClick = function (e) {
     // if null, create it
     if (panel == null) {
       panel = new PropertyInspectorPanel(
@@ -1749,7 +1817,7 @@ PropertyInspectorExtension.prototype.createUI = function() {
   viewer.toolbar.addControl(this.subToolbar);
 };
 
-PropertyInspectorExtension.prototype.unload = function() {
+PropertyInspectorExtension.prototype.unload = function () {
   this.viewer.toolbar.removeControl(this.subToolbar);
   return true;
 };
@@ -1768,7 +1836,7 @@ function PropertyInspectorPanel(viewer, container, id, title, options) {
   this.breadcrumbsItems = [];
   Autodesk.Viewing.UI.PropertyPanel.call(this, container, id, title, options);
 
-  this.showBreadcrumbs = function() {
+  this.showBreadcrumbs = function () {
     // Create it if not there yet
     if (!this.breadcrumbs) {
       this.breadcrumbs = document.createElement("span");
@@ -1796,7 +1864,7 @@ function PropertyInspectorPanel(viewer, container, id, title, options) {
     this.breadcrumbs.appendChild(document.createTextNode("]"));
   }; // showBreadcrumbs
 
-  this.showProperties = function(dbId) {
+  this.showProperties = function (dbId) {
     this.removeAllProperties();
 
     var that = this;
@@ -1814,7 +1882,7 @@ function PropertyInspectorPanel(viewer, container, id, title, options) {
     this.showBreadcrumbs();
   }; // showProperties
 
-  this.onBreadcrumbClick = function(event) {
+  this.onBreadcrumbClick = function (event) {
     var dbId = parseInt(event.currentTarget.text);
     var index = this.breadcrumbsItems.indexOf(dbId);
     this.breadcrumbsItems = this.breadcrumbsItems.splice(0, index);
@@ -1824,7 +1892,7 @@ function PropertyInspectorPanel(viewer, container, id, title, options) {
 
   // This is overriding the default property click handler
   // of Autodesk.Viewing.UI.PropertyPanel
-  this.onPropertyClick = function(property) {
+  this.onPropertyClick = function (property) {
     if (!property.name.includes("[dbId]")) {
       return;
     }
@@ -1833,7 +1901,7 @@ function PropertyInspectorPanel(viewer, container, id, title, options) {
     this.showProperties(dbId);
   }; // onPropertyClick
 
-  this.onSelectionChanged = function(event) {
+  this.onSelectionChanged = function (event) {
     var dbId = event.dbIdArray[0];
 
     if (!dbId) {

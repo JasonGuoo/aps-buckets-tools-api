@@ -153,3 +153,40 @@ http://aps.autodesk.com<br />
    - Visit [http://localhost:3000](http://localhost:3000)
 
 ---
+
+## 统一处理 API
+
+本项目现在提供了统一的 DWG 文件处理 API，实现从上传到 APS 转换、数据提取和打包的全流程自动化处理。
+
+### 主要功能
+
+- 上传 DWG 文件，创建后台任务
+- 自动上传到 APS 进行转换
+- 提取 DWG 文件的属性、图层、图片和文字
+- 将所有结果打包为单一 ZIP 文件
+- 提供任务状态查询和结果下载
+
+### API 文档
+
+- [API 文档(中文)](api_doc_zh.md)
+- [API 文档(英文)](api_doc_en.md)
+
+### 使用示例
+
+查看以下示例了解如何使用 API：
+
+- [cURL 命令示例(中文)](help/curl_examples.md) - 使用 cURL 命令行调用 API
+- [cURL 命令示例(英文)](help/curl_examples_en.md) - cURL command line examples for API
+- [HTTP 请求测试](help/api_test.http) - 可在 VS Code REST Client 扩展中直接使用的测试文件
+
+## 环境配置
+
+项目通过 `.env` 文件配置 APS 凭证。复制 `.env.example` 文件为 `.env` 并填入您的凭证：
+
+```
+APS_CLIENT_ID=your_client_id
+APS_CLIENT_SECRET=your_client_secret
+SERVER_SESSION_SECRET=your_session_secret
+```
+
+---
